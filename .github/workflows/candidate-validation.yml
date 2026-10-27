@@ -1,0 +1,53 @@
+name: Candidate validation
+run-name: Candidate ${{ inputs.commit }}
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit to validate
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  validate:
+    name: Node 20 on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run tests
+        run: pnpm exec vitest run --maxWorkers=2
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Build
+        run: pnpm build
+      - name: Package preview
+        if: runner.os == 'Linux'
+        run: |
+          npm version 0.7.2-claude-effort.1 --no-git-tag-version --ignore-scripts
+          pnpm build
+          mkdir -p preview
+          npm pack --ignore-scripts --pack-destination preview
+      - name: Upload preview
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lark-channel-bridge_v0.7.2_claude-effort-selector
+          path: preview/*.tgz
+          retention-days: 7
+
